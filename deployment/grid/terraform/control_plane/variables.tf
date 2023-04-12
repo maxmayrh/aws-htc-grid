@@ -70,6 +70,10 @@ variable "lambda_name_get_results" {
   description = "Lambda name for get result task"
 }
 
+variable "lambda_name_task_modified" {
+  description = "Lambda name for task modified event"
+}
+
 variable "metrics_are_enabled" {
   description = "If set to True(1) then metrics will be accumulated and delivered downstream for visualisation"
 }

@@ -43,6 +43,48 @@ resource "aws_iam_role" "role_lambda_get_results" {
 EOF
 }
 
+data "aws_iam_policy_document" "role_lambda_task_modified" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+    actions = [
+      "sts:AssumeRole"
+    ]
+  }
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:BatchGetItem",
+      "dynamodb:Query",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:BatchWriteItem",
+      "dynamodb:GetRecords",
+      "dynamodb:GetShardIterator",
+      "dynamodb:DescribeStream",
+      "dynamodb:ListStreams"
+    ]
+    resources = [
+      module.dynamodb_table.dynamodb_table_arn,
+      module.dynamodb_table.dynamodb_table_stream_arn
+    ]
+  }
+}
+
+resource "aws_iam_role" "role_lambda_task_modified" {
+  name = "role_lambda_task_modified-${local.suffix}"
+  assume_role_policy = data.aws_iam_policy_document.role_lambda_task_modified.json
+}
+
 resource "aws_iam_role" "role_lambda_cancel_tasks" {
   name = "role_lambda_cancel_tasks-${local.suffix}"
   assume_role_policy = <<EOF
@@ -277,6 +319,90 @@ module "cancel_tasks" {
     service     = "htc-grid"
   }
   #depends_on = [aws_iam_role_policy_attachment.lambda_logs_attachment, aws_cloudwatch_log_group.cancel_tasks_logs]
+}
+
+
+
+module  "task_modified" {
+  source  = "terraform-aws-modules/lambda/aws"
+  version = "4.6.1"
+  source_path = [
+    "../../../source/control_plane/python/lambda/task_modified",
+    {
+      path = "../../../source/client/python/api-v0.1/"
+      patterns = [
+        "!README\\.md",
+        "!setup\\.py",
+        "!LICENSE*",
+      ]
+    },
+    {
+      path = "../../../source/client/python/utils/"
+      patterns = [
+        "!README\\.md",
+        "!setup\\.py",
+        "!LICENSE*",
+      ]
+    },
+    {
+      pip_requirements = "../../../source/control_plane/python/lambda/task_modified/requirements.txt"
+    }
+  ]
+  function_name = var.lambda_name_task_modified
+  build_in_docker = true
+  docker_image = "${var.aws_htc_ecr}/lambda-build:build-${var.lambda_runtime}"
+  docker_additional_options = [
+    "--platform", "linux/amd64",
+  ]
+  handler = "task_modified.lambda_handler"
+  memory_size = 1024
+  timeout = 300
+  runtime = var.lambda_runtime
+  create_role = false
+  lambda_role = aws_iam_role.role_lambda_task_modified.arn
+  vpc_subnet_ids = var.vpc_private_subnet_ids
+  vpc_security_group_ids = [var.vpc_default_security_group_id]
+  environment_variables = {
+    STATE_TABLE_NAME=var.ddb_state_table,
+    STATE_TABLE_SERVICE=var.state_table_service,
+    STATE_TABLE_CONFIG=var.state_table_config,
+    TASKS_QUEUE_NAME=aws_sqs_queue.htc_task_queue["__0"].name,
+    S3_BUCKET=aws_s3_bucket.htc-stdout-bucket.id,
+    REDIS_URL=aws_elasticache_cluster.stdin-stdout-cache.cache_nodes.0.address,
+    GRID_STORAGE_SERVICE=var.grid_storage_service,
+    TASK_QUEUE_SERVICE = var.task_queue_service,
+    TASK_QUEUE_CONFIG = var.task_queue_config,
+    TASKS_QUEUE_DLQ_NAME = aws_sqs_queue.htc_task_queue_dlq.name,
+    METRICS_ARE_ENABLED = var.metrics_are_enabled,
+    METRICS_GET_RESULTS_LAMBDA_CONNECTION_STRING = var.metrics_get_results_lambda_connection_string,
+    ERROR_LOG_GROUP=var.error_log_group,
+    ERROR_LOGGING_STREAM=var.error_logging_stream,
+    METRICS_GRAFANA_PRIVATE_IP = var.nlb_influxdb,
+    REGION = var.region
+  }
+   tags = {
+    service     = "htc-grid"
+  }
+
+  allowed_triggers = {
+    AllowExecutionFromDynamoDB = {
+      service    = "dynamodb"
+      source_arn = module.dynamodb_table.dynamodb_table_stream_arn
+    }
+  }
+
+  event_source_mapping = {
+    DynamoDBStreamEvent = {
+      event_source_arn  = module.dynamodb_table.dynamodb_table_stream_arn
+      starting_position = "LATEST",
+      filter_criteria = [{
+        pattern = jsonencode({
+          eventName = ["MODIFY"]
+        })
+      }]
+    }
+  }
+  #depends_on = [aws_iam_role_policy_attachment.lambda_logs_attachment, aws_cloudwatch_log_group.submit_task_logs]
 }
 
 

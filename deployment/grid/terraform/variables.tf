@@ -137,6 +137,10 @@ variable "lambda_name_get_results" {
   description = "Lambda name for get result task"
 }
 
+variable "lambda_name_task_modified" {
+  description = "Lambda name for task modified event"
+}
+
 variable "lambda_name_cancel_tasks" {
   default  = "cancel_tasks"
   description = "Lambda name for cancel tasks"

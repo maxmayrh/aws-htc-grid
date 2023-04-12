@@ -16,7 +16,7 @@ import traceback
 
 
 from utils.state_table_common import TASK_STATE_CANCELLED, TASK_STATE_PENDING, TASK_STATE_FAILED,\
-    TASK_STATE_PROCESSING, TASK_STATE_FINISHED
+    TASK_STATE_PROCESSING, TASK_STATE_FINISHED, DEPENDENCY_STATE_FINISHED
 from utils.state_table_common import StateTableException
 
 
@@ -127,6 +127,43 @@ class StateTableDDB:
 
         except Exception as e:
             logging.error(f"Could not read row for task [{task_id}] from Status Table. Exception: {e} [{traceback.format_exc()}]")
+            raise e
+    
+    def update_task_status_to_pending(self, task_id):
+        self.__finalize_tasks_state(task_id, TASK_STATE_PENDING)
+    
+    def update_task_dependency_to_finished(self, task_id, dependency_task_id):
+        try:
+
+            self.state_table.update_item(
+                Key={
+                    'task_id': task_id
+                },
+                UpdateExpression="SET #task_depends_on.#dependency_task_id = :value",
+                ExpressionAttributeValues={
+                    ':value': DEPENDENCY_STATE_FINISHED
+                },
+                ExpressionAttributeNames={
+                    "#task_depends_on": "task_depends_on",
+                    "#dependency_task_id": str(dependency_task_id)
+                }
+            )
+
+        except ClientError as e:
+
+            if e.response['Error']['Code'] in ["ThrottlingException", "ProvisionedThroughputExceededException"]:
+                msg = f"{__name__} Failed. Throttling."
+                logging.warning(msg)
+                raise StateTableException(e, msg, caused_by_throttling=True)
+
+            else:
+                msg = f"{__name__} Failed. Exception: [{e.response['Error']}]"
+                logging.error(msg)
+                raise Exception(e)
+
+        except Exception as e:
+            msg = f"{__name__} Failed. Exception: [{e.response['Error']}]"
+            logging.error(msg)
             raise e
 
     # ---------------------------------------------------------------------------------------------
@@ -595,7 +632,7 @@ class StateTableDDB:
             StateTableException on throttling
             Exception for all other errors
         """
-        if new_task_state not in [TASK_STATE_FAILED, TASK_STATE_CANCELLED]:
+        if new_task_state not in [TASK_STATE_FAILED, TASK_STATE_CANCELLED, TASK_STATE_PENDING]:
             logging.error("__finalize_tasks_state called with incorrect input: {}".format(
                 new_task_state
             ))

@@ -10,6 +10,7 @@ import os
 import uuid
 import traceback
 import copy
+import networkx as nx
 
 from botocore.exceptions import ClientError
 
@@ -18,11 +19,13 @@ from utils.performance_tracker import EventsCounter, performance_tracker_initial
 from boto3.dynamodb.conditions import Key
 
 import utils.grid_error_logger as errlog
-from utils.state_table_common import TASK_STATE_PENDING
+from utils.state_table_common import TASK_STATE_PENDING, TASK_STATE_WAITING, DEPENDENCY_STATE_NOT_FINISHED
 
 from api.in_out_manager import in_out_manager
 from api.queue_manager import queue_manager
 from api.state_table_manager import state_table_manager
+
+from networkx.readwrite import json_graph
 
 region = os.environ["REGION"]
 
@@ -178,34 +181,56 @@ def lambda_handler(event, context):
 
         parent_session_id = event["session_id"]
 
-        lambda_response = {
-            "session_id": session_id,
-            "task_ids": []
-        }
-
         sqs_batch_entries = []
         last_submitted_task_ref = None
 
-        tasks_list = event['tasks_list']['tasks']
+        ERR_CYCLICAL_DEPENDENCY = "Cyclical dependencies are not allowed. The following cyclical dependencies have been detected in the submitted job: {}"
+        ERR_UNKNOWN_ID = "An unknown task ID value was specified in task dependency '{}'. All dependency sources and targets must point to valid tasks."
+
+        task_ids = event['tasks_list']['tasks']
+        task_dependencies = event['tasks_list'].get('task_dependencies', None)
         ddb_batch_write_times = []
+        task_depends_on = {i:[] for i in task_ids}
+        task_has_dependents = {i:[] for i in task_ids}
         backoff_count = 0
+
+        # Manage DAG submissions
+        if task_dependencies is not None:
+            # Check for unknown IDs
+            for t in task_dependencies:
+                if not (t['source'] in task_depends_on and t['target'] in task_depends_on): # Reuse the task_depends_on variable as it contains all task IDs
+                    raise Exception(ERR_UNKNOWN_ID.format(json.dumps(t)))
+                task_depends_on[t['target']].append(t['source'])
+                task_has_dependents[t['source']].append(t['target'])
+            # Validate the submitted job against cyclical dependencies
+            G = json_graph.node_link_graph({
+                'nodes': [{'id': t} for t in task_ids],
+                'links': task_dependencies
+            }, directed=True)
+            cycles = list(nx.simple_cycles(G))
+            if len(cycles) > 0:
+                raise Exception(
+                    ERR_CYCLICAL_DEPENDENCY.format(json.dumps(cycles)))
 
 
         state_table_entries = []
-        for task_id in tasks_list:
+        for task_id in task_ids:
             time_now_ms = get_time_now_ms()
             task_definition = "none"
-
+            # Mark task as waiting for dependencies if > 0
+            task_status = TASK_STATE_WAITING if len(task_depends_on[task_id]) > 0 else TASK_STATE_PENDING
             task_json = {
                 'session_id': session_id,
                 'task_id': task_id,
                 'parent_session_id': parent_session_id,
                 'submission_timestamp': time_now_ms,
                 'task_completion_timestamp': 0,
-                'task_status': state_table.make_task_state_from_session_id(TASK_STATE_PENDING, session_id),
+                'task_status': state_table.make_task_state_from_session_id(task_status, session_id),
                 'task_owner': "None",
                 'retries': 0,
                 'task_definition': task_definition,
+                'task_depends_on': {str(t): DEPENDENCY_STATE_NOT_FINISHED for t in task_depends_on[task_id]},
+                'task_has_dependents': task_has_dependents[task_id],
                 'sqs_handler_id': "None",
                 'heartbeat_expiration_timestamp': 0,
                 "task_priority": session_priority
@@ -213,21 +238,23 @@ def lambda_handler(event, context):
 
             state_table_entries.append(task_json)
 
-            task_json_4_sqs: dict = copy.deepcopy(task_json)
+            # Only put tasks without dependencies in the queue
+            if task_status == TASK_STATE_PENDING:
+                task_json_4_sqs: dict = copy.deepcopy(task_json)
 
-            task_json_4_sqs["stats"] = event["stats"]
-            task_json_4_sqs["stats"]["stage2_sbmtlmba_01_invocation_tstmp"]["tstmp"] = invocation_tstmp
-            task_json_4_sqs["stats"]["stage2_sbmtlmba_02_before_batch_write_tstmp"]["tstmp"] = get_time_now_ms()
+                task_json_4_sqs["stats"] = event["stats"]
+                task_json_4_sqs["stats"]["stage2_sbmtlmba_01_invocation_tstmp"]["tstmp"] = invocation_tstmp
+                task_json_4_sqs["stats"]["stage2_sbmtlmba_02_before_batch_write_tstmp"]["tstmp"] = get_time_now_ms()
 
-            # task_json["scheduler_data"] = event["scheduler_data"]
+                # task_json["scheduler_data"] = event["scheduler_data"]
 
-            sqs_batch_entries.append({
-                'Id': task_id,  # use to return send result for this message
-                'MessageBody': json.dumps(task_json_4_sqs)
-                }
-            )
+                sqs_batch_entries.append({
+                    'Id': task_id,  # use to return send result for this message
+                    'MessageBody': json.dumps(task_json_4_sqs)
+                    }
+                )
 
-            last_submitted_task_ref = task_json_4_sqs
+                last_submitted_task_ref = task_json_4_sqs
 
         state_table.batch_write(state_table_entries)
 
@@ -242,7 +269,7 @@ def lambda_handler(event, context):
         # <3.> Non performance critical code, statistics and book-keeping.
         event_counter = EventsCounter(["count_submitted_tasks", "count_ddb_batch_backoffs", "count_ddb_batch_write_max",
                                        "count_ddb_batch_write_min", "count_ddb_batch_write_avg"])
-        event_counter.increment("count_submitted_tasks", len(sqs_batch_entries))
+        event_counter.increment("count_submitted_tasks", len(state_table_entries))
 
         last_submitted_task_ref['stats']['stage2_sbmtlmba_03_invocation_over_tstmp'] = {"label": "dynamo_db_submit_ms",
                                                                                         "tstmp": get_time_now_ms()}
@@ -267,8 +294,10 @@ def lambda_handler(event, context):
         perf_tracker.submit_measurements()
 
         # <4.> Asswmble the response
-        for sqs_msg in sqs_batch_entries:
-            lambda_response["task_ids"].append(sqs_msg['Id'])
+        lambda_response = {
+            "session_id": session_id,
+            "task_ids": task_ids
+        }
 
         return {
             'statusCode': 200,
@@ -297,14 +326,17 @@ def lambda_handler(event, context):
 # it seems that the first call to uuid in Lambda environment can produces unsafe UUID.
 # check if at least the second UUID provided is safe, otherwise errors out
 def get_safe_session_id():
-    """This method generates a safe session ID.
+    """Generates a safe session ID.
 
     Args:
+    ----
 
     Returns:
+    -------
       str: a safe session id
 
     Raises:
+    ------
       Exception: if session id is not safe
 
     """

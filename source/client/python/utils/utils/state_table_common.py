@@ -8,6 +8,9 @@ TASK_STATE_PENDING = "pending"
 TASK_STATE_FAILED = "failed"
 TASK_STATE_FINISHED = "finished"
 TASK_STATE_PROCESSING = "processing"
+TASK_STATE_WAITING = "waiting on dependencies"
+DEPENDENCY_STATE_NOT_FINISHED = "N"
+DEPENDENCY_STATE_FINISHED = "Y"
 
 
 class StateTableException(Exception):

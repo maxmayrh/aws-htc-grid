@@ -29,6 +29,7 @@ locals {
     lambda_name_get_results = "${var.lambda_name_get_results}-${local.project_name}"
     lambda_name_submit_tasks = "${var.lambda_name_submit_tasks}-${local.project_name}"
     lambda_name_cancel_tasks = "${var.lambda_name_cancel_tasks}-${local.project_name}"
+    lambda_name_task_modified = "${var.lambda_name_task_modified}-${local.project_name}"
     lambda_name_ttl_checker = "${var.lambda_name_ttl_checker}-${local.project_name}"
     lambda_name_scaling_metric = "${var.lambda_name_scaling_metric}-${local.project_name}"
     metrics_name = "${var.metrics_name}-${local.project_name}"

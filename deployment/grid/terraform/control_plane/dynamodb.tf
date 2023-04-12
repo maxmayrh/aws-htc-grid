@@ -14,6 +14,9 @@ module "dynamodb_table" {
 
   billing_mode = var.dynamodb_billing_mode
 
+  stream_enabled = true
+  stream_view_type = "NEW_AND_OLD_IMAGES"
+
   hash_key = "task_id"
 
   attributes = [

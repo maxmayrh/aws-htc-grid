@@ -170,7 +170,7 @@ class AWSConnector:
                 raise e
             self.__configuration.api_key['htc_cognito_authorizer'] = self.__user_token_id
 
-    def generate_user_task_json(self, tasks_list=None):
+    def generate_user_task_json(self, tasks_list=None, task_dependencies:list=None):
         """this methods returns from a list of tasks, a tasks object that can be submitted to the grid
 
         Args:
@@ -229,7 +229,8 @@ class AWSConnector:
                 "stage4_agent_02_S3_stdout_delivered_tstmp": {"label": "S3_stdout_upload_time_ms", "tstmp": 0}
             },
             "tasks_list": {
-                "tasks": binary_tasks_list if self.__task_input_passed_via_external_storage == 1 else tasks_list
+                "tasks": binary_tasks_list if self.__task_input_passed_via_external_storage == 1 else tasks_list,
+                "task_dependencies": task_dependencies
             }
         }
 
@@ -249,18 +250,19 @@ class AWSConnector:
 
     # TODO raise exception when the  task list is above a given threshold
     # TODO create a response object instead of  dictionary
-    def send(self, tasks_list):  # returns TaskID[]
+    def send(self, tasks_list, task_dependencies:list=None):  # returns TaskID[]
         """This method submits tasks to the HTC grid
 
         Args:
           tasks_list (list): the list of tasks to execute on the grid
+          task_dependencies (optional - list): the list of task dependencies between submitted tasks. If this parameter is provided, then the provided tasks must include an 'id' field.
 
         Returns:
           dict: the response from the endpoint of the HTC grid
 
         """
-        logging.info("Init send {} tasks".format(len(tasks_list)))
-        user_task_json_request = self.generate_user_task_json(tasks_list)
+        logging.info("Init send {} tasks{}".format(len(tasks_list), "" if task_dependencies is None else " with supplied dependencies"))
+        user_task_json_request = self.generate_user_task_json(tasks_list, task_dependencies)
         logging.info("user_task_json_request: {}".format(user_task_json_request))
         # print(user_task_json_request)
 
