@@ -170,7 +170,7 @@ class AWSConnector:
                 raise e
             self.__configuration.api_key['htc_cognito_authorizer'] = self.__user_token_id
 
-    def generate_user_task_json(self, tasks_list=None, task_dependencies:list=None):
+    def generate_user_task_json(self, tasks_list = None, task_dependencies: list = None):
         """this methods returns from a list of tasks, a tasks object that can be submitted to the grid
 
         Args:
@@ -250,7 +250,7 @@ class AWSConnector:
 
     # TODO raise exception when the  task list is above a given threshold
     # TODO create a response object instead of  dictionary
-    def send(self, tasks_list, task_dependencies:list=None):  # returns TaskID[]
+    def send(self, tasks_list, task_dependencies: list = None):  # returns TaskID[]
         """This method submits tasks to the HTC grid
 
         Args:
