@@ -128,10 +128,10 @@ class StateTableDDB:
         except Exception as e:
             logging.error(f"Could not read row for task [{task_id}] from Status Table. Exception: {e} [{traceback.format_exc()}]")
             raise e
-    
+
     def update_task_status_to_pending(self, task_id):
         self.__finalize_tasks_state(task_id, TASK_STATE_PENDING)
-    
+
     def update_task_dependency_to_finished(self, task_id, dependency_task_id):
         try:
 
