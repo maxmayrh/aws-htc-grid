@@ -5,4 +5,3 @@ warrant_lite
 apscheduler
 ./../../../../dist/python/privateapi-1.0.0-py3-none-any.whl
 ./../../../../dist/python/publicapi-1.0.0-py3-none-any.whl
-urllib3==1.26.15
