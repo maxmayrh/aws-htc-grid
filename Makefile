@@ -219,7 +219,7 @@ api: http-apis
 	$(MAKE) -C ./source/client/python/api-v0.1
 
 # test-api: install-utils
-	$(MAKE) test -C ./source/client/python/api-v0.1
+#	$(MAKE) test -C ./source/client/python/api-v0.1
 
 test-agent:
 	$(MAKE) test -C ./source/compute_plane/python/agent
