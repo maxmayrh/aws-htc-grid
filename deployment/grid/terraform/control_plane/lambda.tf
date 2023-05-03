@@ -51,16 +51,6 @@ data "aws_iam_policy_document" "role_lambda_task_modified" {
       identifiers = ["lambda.amazonaws.com"]
     }
     actions = [
-      "sts:AssumeRole"
-    ]
-  }
-  statement {
-    effect = "Allow"
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
-    actions = [
       "dynamodb:GetItem",
       "dynamodb:BatchGetItem",
       "dynamodb:Query",
@@ -79,11 +69,37 @@ data "aws_iam_policy_document" "role_lambda_task_modified" {
     ]
   }
 }
+    
+resource "aws_iam_policy" "role_lambda_task_modified" {
+  name_prefix = "role_lambda_task_modified-${local.suffix}"
+  description = "lambda policy for task_modified"
+  policy      = data.aws_iam_policy_document.role_lambda_task_modified.json
+}
 
 resource "aws_iam_role" "role_lambda_task_modified" {
   name = "role_lambda_task_modified-${local.suffix}"
-  assume_role_policy = data.aws_iam_policy_document.role_lambda_task_modified.json
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "lambda.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
 }
+EOF
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_task_modified_policy_attach" {
+  policy_arn = aws_iam_policy.role_lambda_task_modified.arn
+  role       = aws_iam_role.role_lambda_task_modified.name
+}
+    
 
 resource "aws_iam_role" "role_lambda_cancel_tasks" {
   name = "role_lambda_cancel_tasks-${local.suffix}"
