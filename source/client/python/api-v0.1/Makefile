@@ -22,7 +22,3 @@ $(PACKAGE_TARGET): setup.py README.md $(SRCS)
 flake8: $(SRCS) init
 	flake8  --ignore  E501,W503,E131,E252 --statistic --exclude build
 
-pytest: $(SRCS) init
-	pytest --cov=api ./tests/
-
-test: flake8 pytest
