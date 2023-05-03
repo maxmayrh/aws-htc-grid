@@ -138,6 +138,7 @@ variable "lambda_name_get_results" {
 }
 
 variable "lambda_name_task_modified" {
+  default  = "task_modified"
   description = "Lambda name for task modified event"
 }
 
