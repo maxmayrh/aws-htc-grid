@@ -46,10 +46,6 @@ EOF
 data "aws_iam_policy_document" "role_lambda_task_modified" {
   statement {
     effect = "Allow"
-    principals {
-      type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
-    }
     actions = [
       "dynamodb:GetItem",
       "dynamodb:BatchGetItem",
