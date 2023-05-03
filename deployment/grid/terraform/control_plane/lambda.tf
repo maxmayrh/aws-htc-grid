@@ -57,7 +57,8 @@ data "aws_iam_policy_document" "role_lambda_task_modified" {
       "dynamodb:GetRecords",
       "dynamodb:GetShardIterator",
       "dynamodb:DescribeStream",
-      "dynamodb:ListStreams"
+      "dynamodb:ListStreams",
+      "CreateNetworkInterface"
     ]
     resources = [
       module.dynamodb_table.dynamodb_table_arn,
