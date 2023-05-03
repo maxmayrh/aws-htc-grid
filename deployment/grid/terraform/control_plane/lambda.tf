@@ -57,8 +57,7 @@ data "aws_iam_policy_document" "role_lambda_task_modified" {
       "dynamodb:GetRecords",
       "dynamodb:GetShardIterator",
       "dynamodb:DescribeStream",
-      "dynamodb:ListStreams",
-      "ec2:CreateNetworkInterface"
+      "dynamodb:ListStreams"
     ]
     resources = [
       module.dynamodb_table.dynamodb_table_arn,
@@ -95,6 +94,11 @@ EOF
 resource "aws_iam_role_policy_attachment" "lambda_task_modified_policy_attach" {
   policy_arn = aws_iam_policy.role_lambda_task_modified.arn
   role       = aws_iam_role.role_lambda_task_modified.name
+}
+    
+resource "aws_iam_role_policy_attachment" "AWSLambdaVPCAccessExecutionRole" {
+    role       = aws_iam_role.role_lambda_task_modified.name
+    policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
     
 
