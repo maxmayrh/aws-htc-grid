@@ -415,6 +415,13 @@ module  "task_modified" {
       filter_criteria = [{
         pattern = jsonencode({
           eventName = ["MODIFY"]
+          dynamodb = {
+            NewImage = {
+              task_status = {
+                S = ["PENDING"]
+              }
+            }
+          }
         })
       }]
     }
