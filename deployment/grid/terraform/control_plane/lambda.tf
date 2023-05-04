@@ -374,6 +374,7 @@ module  "task_modified" {
   handler = "task_modified.lambda_handler"
   memory_size = 1024
   timeout = 300
+  publish = true 
   runtime = var.lambda_runtime
   create_role = false
   lambda_role = aws_iam_role.role_lambda_task_modified.arn
