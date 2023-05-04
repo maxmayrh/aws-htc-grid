@@ -412,18 +412,9 @@ module  "task_modified" {
     DynamoDBStreamEvent = {
       event_source_arn  = module.dynamodb_table.dynamodb_table_stream_arn
       starting_position = "LATEST",
-      filter_criteria = [{
-        pattern = jsonencode({
-          eventName = ["MODIFY"]
-          dynamodb = {
-            NewImage = {
-              task_status = {
-                S = ["PENDING"]
-              }
-            }
-          }
-        })
-      }]
+      filter_criteria = {
+        pattern = "{\"eventName\": [\"MODIFY\"]}"
+      }
     }
   }
   #depends_on = [aws_iam_role_policy_attachment.lambda_logs_attachment, aws_cloudwatch_log_group.submit_task_logs]
